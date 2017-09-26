@@ -1,0 +1,13 @@
+BLE_DONGLE.cywrk.*
+
+BLE_DONGLE.cydsn/ARM_GCC_493/
+BLE_DONGLE.cydsn/Backup/
+BLE_DONGLE.cydsn/Export/
+BLE_DONGLE.cydsn/Generated_Source/
+BLE_DONGLE.cydsn/BLE_DONGLE.cycdx
+BLE_DONGLE.cydsn/BLE_DONGLE.cyfit
+BLE_DONGLE.cydsn/BLE_DONGLE.rpt
+BLE_DONGLE.cydsn/BLE_DONGLE.svd
+BLE_DONGLE.cydsn/BLE_DONGLE_timing.html
+BLE_DONGLE.cydsn/codegentemp/
+BLE_DONGLE.cydsn/BLE_DONGLE.cyprj.*
