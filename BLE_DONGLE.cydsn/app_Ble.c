@@ -13,6 +13,8 @@
 
 #include "app_Ble.h"
 
+#include "main.h"
+
 uint16 txCharHandle             = 0;                /* Handle for the TX data characteristic */
 uint16 rxCharHandle             = 0;                /* Handle for the RX data characteristic */
 uint16 txCharDescHandle         = 0;                /* Handle for the TX data characteristic descriptor */
@@ -22,11 +24,11 @@ uint16 mtuSize                  = CYBLE_GATT_MTU;   /* MTU size to be used by Cl
 
 const uint8 enableNotificationParam[2] = {0x01, 0x00};
 
-volatile static bool peerDeviceFound         = false;
-volatile static bool notificationEnabled     = false;
+bool peerDeviceFound         = false;
+bool notificationEnabled     = false;
 
-static CYBLE_GAP_BD_ADDR_T      peerAddr;           /* BD address of the peer device */
-static INFO_EXCHANGE_STATE_T    infoExchangeState   = INFO_EXCHANGE_START;
+CYBLE_GAP_BD_ADDR_T      peerAddr;           /* BD address of the peer device */
+INFO_EXCHANGE_STATE_T    infoExchangeState   = INFO_EXCHANGE_START;
 
 CYBLE_GATT_ATTR_HANDLE_RANGE_T  attrHandleRange;
 CYBLE_GATTC_FIND_INFO_REQ_T     charDescHandleRange;
@@ -61,7 +63,24 @@ CYBLE_GATTC_WRITE_REQ_T     enableNotificationReqParam   = {
                                                                 {(uint8*)enableNotificationParam, 2, 2},
                                                                 0
                                                             };
+void deviceDisconnected()
+{
+ 	/* RESET all flags */
+	peerDeviceFound         = false;
+	notificationEnabled     = false;
+	infoExchangeState       = INFO_EXCHANGE_START;
+        
+#ifdef PRINT_MESSAGE_LOG   
+	UART_UartPutString("Device disconnected\n");
+	while(0 != (UART_SpiUartGetTxBufferSize() + UART_GET_TX_FIFO_SR_VALID));
+#endif
 
+	/* RESET Uart and flush all buffers */
+	UART_Stop();
+	UART_SpiUartClearTxBuffer();
+	UART_SpiUartClearRxBuffer();
+	UART_Start();
+}
 
 /*******************************************************************************
 * Function Name: HandleBleProcessing
@@ -112,7 +131,10 @@ void HandleBleProcessing(void)
             /* if client has all required info and stack is free, handle UART traffic */
             else if(CyBle_GattGetBusStatus() != CYBLE_STACK_STATE_BUSY)
             {
-                HandleUartTxTraffic();
+		if (notificationEnabled)
+		{
+		    HandleUartTxTraffic();
+		}
             }
             
             break;
@@ -121,18 +143,18 @@ void HandleBleProcessing(void)
         {
             if(peerDeviceFound)
             {
-                UART_UartPutString("\n Found device...");
+//                UART_UartPutString("Found device...\n");
                 cyble_api_result = CyBle_GapcConnectDevice(&peerAddr);
                 
-			    if(CYBLE_ERROR_OK == cyble_api_result)
-			    {
-				    peerDeviceFound = false;
-			    }
+		if(CYBLE_ERROR_OK == cyble_api_result)
+		{
+		    peerDeviceFound = false;
+		}
             }
             else
             {
                 CyBle_GapcStartScan(CYBLE_SCANNING_FAST);
-                UART_UartPutString("\n Start scanning...");
+  //              UART_UartPutString("Start scanning...\n");
             }
             break;
         }
@@ -165,7 +187,6 @@ void AppCallBack(uint32 event, void *eventParam)
     CYBLE_GAPC_ADV_REPORT_T		            *advReport;
     CYBLE_GATTC_FIND_BY_TYPE_RSP_PARAM_T    *findResponse;
     CYBLE_GATTC_FIND_INFO_RSP_PARAM_T       *findInfoResponse;
-    int i;
     
     //UART_UartPutChar(event);
     switch (event)
@@ -181,65 +202,70 @@ void AppCallBack(uint32 event, void *eventParam)
         case CYBLE_EVT_GAPC_SCAN_PROGRESS_RESULT:
             
             advReport = (CYBLE_GAPC_ADV_REPORT_T *) eventParam;
-            /*
-            UART_UartPutChar(advReport->dataLen);
-            for(i=0;i<advReport->dataLen; i++){
-                UART_UartPutChar(i+'0');
-                UART_UartPutChar(advReport->data[i]);
-            }
-            */
+
             /* check if report has manfacturing data corresponding to the intended matching peer */
             if((advReport->eventType == CYBLE_GAPC_SCAN_RSP) && (advReport->dataLen == 0x0D) \
-                    && (advReport->data[0] == 0x06)\
-                    && (advReport->data[7] == 0x05) && (advReport->data[8] == 0xff) \
-                    && (advReport->data[9] == 0x31) && (advReport->data[10] == 0x01) \
-                    && (advReport->data[11] == 0x3b) && (advReport->data[12] == 0x04))
+	       && (advReport->data[0] == 0x06)				\
+	       && (advReport->data[7] == 0x05) && (advReport->data[8] == 0xff) \
+	       && (advReport->data[9] == 0x31) && (advReport->data[10] == 0x01) \
+	       && (advReport->data[11] == 0x3b) && (advReport->data[12] == 0x04))
             {
                 /* check if name is corresponding to desired aMussel name */
-                if((advReport->data[1] == 0x09) && (advReport->data[2] == BlName[0])\
-                    && (advReport->data[3] == BlName[1]) && (advReport->data[4] == BlName[2]) \
-                    && (advReport->data[5] == BlName[3]) && (advReport->data[6] == BlName[4])) 
+                if(
+                    advReport->data[1] == 0x09
+                    && advReport->data[2] == deviceName[0]
+                    && advReport->data[3] == deviceName[1]
+                    && advReport->data[4] == deviceName[2]
+                    && advReport->data[5] == deviceName[3]
+                    && advReport->data[6] == deviceName[4]
+                    )                    
                 {
-                    peerDeviceFound = true;
-                    
+                    peerDeviceFound = true;                    
                     memcpy(peerAddr.bdAddr, advReport->peerBdAddr, sizeof(peerAddr.bdAddr));
-                    peerAddr.type = advReport->peerAddrType;
-                    
-                    #ifdef PRINT_MESSAGE_LOG   
-                        UART_UartPutString("\n\r\n\rServer with matching custom service discovered...");
-                    #endif
+                    peerAddr.type = advReport->peerAddrType;                    
                 }
-                else {
-                    UART_UartPutString("\nWrong aMussel");
+                else
+		{
+		    UART_UartPutString(".");
+            
+		    // we found another device, check if it is in the list
+		    if (
+			advReport->data[1] == 0x09 
+			&& advReport->data[2] == deviceName[0] 
+			&& advReport->data[3] == deviceName[1])
+		    {
+			int detectedLabel = advReport->data[4] - '0';
+			detectedLabel *= 10;
+			detectedLabel += advReport->data[5] - '0';
+			detectedLabel *= 10;
+			detectedLabel += advReport->data[6] - '0';
+			
+			int detectedId;
+			detectedId = findId(detectedLabel);
+            
+			if (detectedId > 0)
+			{
+			    setCurrentId(detectedId);
+			    
+			    peerDeviceFound = true;                    
+			    memcpy(peerAddr.bdAddr, advReport->peerBdAddr, sizeof(peerAddr.bdAddr));
+			    peerAddr.type = advReport->peerAddrType;                    
+			}
+		    
+		    }
                 }
             }
-            
-            
+                        
             break;    
             
-        case CYBLE_EVT_GAP_AUTH_REQ:
-            UART_UartPutString("\nAUTH\n");
-            break;
-            
-        case CYBLE_EVT_GAP_DEVICE_DISCONNECTED:
-            
-            /* RESET all flags */
-            peerDeviceFound         = false;
-            notificationEnabled     = false;
-            infoExchangeState       = INFO_EXCHANGE_START;
-            
-            #ifdef PRINT_MESSAGE_LOG   
-                UART_UartPutString("\n\r DISCONNECTED!!! \n\r ");
-                while(0 != (UART_SpiUartGetTxBufferSize() + UART_GET_TX_FIFO_SR_VALID));
-            #endif
-            
-            /* RESET Uart and flush all buffers */
-            UART_Stop();
-            UART_SpiUartClearTxBuffer();
-            UART_SpiUartClearRxBuffer();
-            UART_Start();
-            
-            break;
+    case CYBLE_EVT_GAP_AUTH_REQ:
+	UART_UartPutString("\nAUTH\n");
+	break;
+        
+    case CYBLE_EVT_GAP_DEVICE_DISCONNECTED:
+	deviceDisconnected();
+        
+	break;
         
         case CYBLE_EVT_GATTC_READ_BY_TYPE_RSP:
             
@@ -328,10 +354,15 @@ void AppCallBack(uint32 event, void *eventParam)
         case CYBLE_EVT_GATTC_WRITE_RSP:
             
             notificationEnabled = true;
-            
             #ifdef PRINT_MESSAGE_LOG   
-                UART_UartPutString("\n\rNotifications enabled\n\r");
-                UART_UartPutString("\n\rStart entering data:\n\r");
+	    //               UART_UartPutString("\n\rNotifications enabled\n\r");
+	    //UART_UartPutString("Device ready to receive data\n");
+		UART_UartPutChar(deviceName[0]);
+		UART_UartPutChar(deviceName[1]);
+		UART_UartPutChar(deviceName[2]);
+		UART_UartPutChar(deviceName[3]);
+		UART_UartPutChar(deviceName[4]);
+		UART_UartPutString(">\n");
             #endif
             
             break;
@@ -339,7 +370,13 @@ void AppCallBack(uint32 event, void *eventParam)
         case CYBLE_EVT_GATT_CONNECT_IND:
             
             #ifdef PRINT_MESSAGE_LOG   
-                UART_UartPutString("\n\rConnection established");             
+                /* UART_UartPutString("Connected to ");              */
+		/* UART_UartPutChar(deviceName[0]); */
+		/* UART_UartPutChar(deviceName[1]); */
+		/* UART_UartPutChar(deviceName[2]); */
+		/* UART_UartPutChar(deviceName[3]); */
+		/* UART_UartPutChar(deviceName[4]); */
+		/* UART_UartPutChar('\n'); */
             #endif
             
             break;

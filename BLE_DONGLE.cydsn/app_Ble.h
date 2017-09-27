@@ -14,47 +14,46 @@
 
 #if !defined(APP_BLE_H)
     
-    #define APP_BLE_H
+#define APP_BLE_H
+
+#include <project.h>
+#include "app_UART.h"
+#include "stdbool.h"
+
+
+/***************************************
+ *   Enumerated Types and Structs
+ ***************************************/
+typedef enum 
+{
+    INFO_EXCHANGE_START             = 0x00,
+    BLE_UART_SERVICE_HANDLE_FOUND   = 0x01,
+    TX_ATTR_HANDLE_FOUND            = 0x02,
+    RX_ATTR_HANDLE_FOUND            = 0x04,
+    TX_CCCD_HANDLE_FOUND            = 0x08,
+    MTU_XCHNG_COMPLETE              = 0x10,
     
-    #include <project.h>
-    #include "app_UART.h"
-    #include "stdbool.h"
+    SERVICE_AND_CHAR_HANDLES_FOUND  = BLE_UART_SERVICE_HANDLE_FOUND |	\
+    TX_ATTR_HANDLE_FOUND | RX_ATTR_HANDLE_FOUND,
     
-    /*  global variable for BLE peripheral name  */
-    uint8_t BlName[5];
+    ALL_HANDLES_FOUND               = BLE_UART_SERVICE_HANDLE_FOUND |	\
+    TX_ATTR_HANDLE_FOUND | RX_ATTR_HANDLE_FOUND |			\
+    TX_CCCD_HANDLE_FOUND,
     
-    /***************************************
-    *   Enumerated Types and Structs
-    ***************************************/
-    typedef enum 
-    {
-        INFO_EXCHANGE_START             = 0x00,
-        BLE_UART_SERVICE_HANDLE_FOUND   = 0x01,
-        TX_ATTR_HANDLE_FOUND            = 0x02,
-        RX_ATTR_HANDLE_FOUND            = 0x04,
-        TX_CCCD_HANDLE_FOUND            = 0x08,
-        MTU_XCHNG_COMPLETE              = 0x10,
-        
-        SERVICE_AND_CHAR_HANDLES_FOUND  = BLE_UART_SERVICE_HANDLE_FOUND | \
-                                                TX_ATTR_HANDLE_FOUND | RX_ATTR_HANDLE_FOUND,
-        
-        ALL_HANDLES_FOUND               = BLE_UART_SERVICE_HANDLE_FOUND | \
-                                                TX_ATTR_HANDLE_FOUND | RX_ATTR_HANDLE_FOUND | \
-                                                TX_CCCD_HANDLE_FOUND,
-        
-        INFO_EXCHANGE_COMPLETE          = BLE_UART_SERVICE_HANDLE_FOUND | \
-                                                TX_ATTR_HANDLE_FOUND | RX_ATTR_HANDLE_FOUND | \
-                                                TX_CCCD_HANDLE_FOUND | MTU_XCHNG_COMPLETE
-        
-    } INFO_EXCHANGE_STATE_T;
+    INFO_EXCHANGE_COMPLETE          = BLE_UART_SERVICE_HANDLE_FOUND |	\
+    TX_ATTR_HANDLE_FOUND | RX_ATTR_HANDLE_FOUND |			\
+    TX_CCCD_HANDLE_FOUND | MTU_XCHNG_COMPLETE
     
-    /***************************************
-    *       Function Prototypes
-    ***************************************/
-    void HandleBleProcessing(void);
-    void attrHandleInit(void);
-    void enableNotifications(void);
+} INFO_EXCHANGE_STATE_T;
     
+/***************************************
+ *       Function Prototypes
+ ***************************************/
+void HandleBleProcessing(void);
+void attrHandleInit(void);
+void enableNotifications(void);
+
+void deviceDisconnected();
+
 #endif
 
-/* [] END OF FILE */
