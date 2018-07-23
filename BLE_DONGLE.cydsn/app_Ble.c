@@ -31,22 +31,22 @@ static INFO_EXCHANGE_STATE_T    infoExchangeState   = INFO_EXCHANGE_START;
 CYBLE_GATT_ATTR_HANDLE_RANGE_T  attrHandleRange;
 CYBLE_GATTC_FIND_INFO_REQ_T     charDescHandleRange;
 
-/* UUID of the custom BLE UART service */
+/* UUID of the Nordic BLE UART service */
 const uint8 bleUartServiceUuid[16]    = {
-                                            0x31, 0x01, 0x9b, 0x5f, 0x80, 0x00, 0x00,0x80, \
-                                            0x00, 0x10, 0x00, 0x00, 0xd0, 0xcd, 0x03, 0x00 \
+                                            0x9e, 0xca, 0xdc, 0x24, 0x0e, 0xe5, 0xa9,0xe0, \
+                                            0x93, 0xf3, 0xa3, 0xb5, 0x01, 0x00, 0x40, 0x6e \
                                         };
 
-/* UUID of the TX attribute of the custom BLE UART service */
+/* UUID of the TX attribute of the Nordic BLE UART service */
 const uint8 uartTxAttrUuid[16]        = {
-                                            0x31, 0x01, 0x9b, 0x5f, 0x80, 0x00, 0x00,0x80, \
-                                            0x00, 0x10, 0x00, 0x00, 0xd1, 0xcd, 0x03, 0x00 \
+                                            0x9e, 0xca, 0xdc, 0x24, 0x0e, 0xe5, 0xa9,0xe0, \
+                                            0x93, 0xf3, 0xa3, 0xb5, 0x02, 0x00, 0x40, 0x6e \
                                         };
 
-/* UUID of the RX attribute of the custom BLE UART service */
+/* UUID of the RX attribute of the Nordic BLE UART service */
 const uint8 uartRxAttrUuid[16]        = {
-                                            0x31, 0x01, 0x9b, 0x5f, 0x80, 0x00, 0x00,0x80, \
-                                            0x00, 0x10, 0x00, 0x00, 0xd2, 0xcd, 0x03, 0x00 \
+                                            0x9e, 0xca, 0xdc, 0x24, 0x0e, 0xe5, 0xa9,0xe0, \
+                                            0x93, 0xf3, 0xa3, 0xb5, 0x03, 0x00, 0x40, 0x6e \
                                         };
 
 /* structure to be passed for discovering service by UUID */
