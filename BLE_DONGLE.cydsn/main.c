@@ -114,15 +114,17 @@ int main()
                 
                 if(ch >= '0' && ch <= '9') {
                     BlName[i+2] = ch;
+                    UART_UartPutChar(ch);
                 }
                 else {
                     UART_UartPutString("\n Index out of range. \n Repeat number sequence [000 - 999]");
-                    i = 0;
+                    i = -1;
                 }
                 
                 if(i == 2) 
                     bootloaderStart = 1;
             }
+            UART_UartPutString("\n Connecting to ");
             for(i=0; i<5; i++){
                 UART_UartPutChar(BlName[i]);
             }
