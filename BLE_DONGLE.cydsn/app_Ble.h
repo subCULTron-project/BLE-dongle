@@ -17,11 +17,14 @@
     #define APP_BLE_H
     
     #include <project.h>
+    #include <stdio.h>
     #include "app_UART.h"
     #include "stdbool.h"
     
     /*  global variable for BLE peripheral name  */
-    uint8_t BlName[5];
+    uint8_t BlName[2];
+    
+    #define MAX_BLE_DEVICE_NUM 30
     
     /***************************************
     *   Enumerated Types and Structs
@@ -47,6 +50,14 @@
                                                 TX_CCCD_HANDLE_FOUND | MTU_XCHNG_COMPLETE
         
     } INFO_EXCHANGE_STATE_T;
+    
+    struct ble_device
+    {
+        CYBLE_GAP_BD_ADDR_T     connectPeriphDevice;
+        char name[20];
+    } scannedPeriphDevice[MAX_BLE_DEVICE_NUM];
+    
+    
     
     /***************************************
     *       Function Prototypes

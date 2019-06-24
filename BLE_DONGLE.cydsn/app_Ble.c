@@ -13,6 +13,31 @@
 
 #include "app_Ble.h"
 
+uint8 devIndex;
+uint8 Periph_Selected;
+
+/* 'connHandle' is a varibale of type 'CYBLE_CONN_HANDLE_T' (defined in 
+* BLE_StackGatt.h) and is used to store the connection handle parameters after
+* connecting with the peripheral device. */
+CYBLE_CONN_HANDLE_T			connHandle;
+
+	/* 'apiResult' is a varibale of type 'CYBLE_API_RESULT_T' (defined in 
+* BLE_StackTypes.h) and is used to store the return value from BLE APIs. */
+	
+CYBLE_API_RESULT_T 		    apiResult;
+	
+/* 'connectPeriphDevice' is a varibale of type 'CYBLE_GAP_BD_ADDR_T' (defined in 
+* BLE_StackGap.h) and is used to store address of the connected device. */
+//CYBLE_GAP_BD_ADDR_T     connectPeriphDevice[MAX_BLE_DEVICE_NUM];
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////OLD///////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+
 uint16 txCharHandle             = 0;                /* Handle for the TX data characteristic */
 uint16 rxCharHandle             = 0;                /* Handle for the RX data characteristic */
 uint16 txCharDescHandle         = 0;                /* Handle for the TX data characteristic descriptor */
@@ -22,10 +47,8 @@ uint16 mtuSize                  = CYBLE_GATT_MTU;   /* MTU size to be used by Cl
 
 const uint8 enableNotificationParam[2] = {0x01, 0x00};
 
-volatile static bool peerDeviceFound         = false;
 volatile static bool notificationEnabled     = false;
 
-static CYBLE_GAP_BD_ADDR_T      peerAddr;           /* BD address of the peer device */
 static INFO_EXCHANGE_STATE_T    infoExchangeState   = INFO_EXCHANGE_START;
 
 CYBLE_GATT_ATTR_HANDLE_RANGE_T  attrHandleRange;
@@ -33,21 +56,40 @@ CYBLE_GATTC_FIND_INFO_REQ_T     charDescHandleRange;
 
 /* UUID of the custom BLE UART service */
 const uint8 bleUartServiceUuid[16]    = {
+                                            0x9e, 0xca, 0xdc, 0x24, 0x0e, 0xe5, 0xa9,0xe0, \
+                                            0x93, 0xf3, 0xa3, 0xb5, 0x01, 0x00, 0x40, 0x6e \
+                                        };
+
+
+/* UUID of the TX attribute of the custom BLE UART service */
+const uint8 uartTxAttrUuid[16]    = {
+                                            0x9e, 0xca, 0xdc, 0x24, 0x0e, 0xe5, 0xa9,0xe0, \
+                                            0x93, 0xf3, 0xa3, 0xb5, 0x03, 0x00, 0x40, 0x6e \
+                                        };
+
+/* UUID of the RX attribute of the custom BLE UART service */
+const uint8 uartRxAttrUuid[16]    = {
+                                            0x9e, 0xca, 0xdc, 0x24, 0x0e, 0xe5, 0xa9,0xe0, \
+                                            0x93, 0xf3, 0xa3, 0xb5, 0x02, 0x00, 0x40, 0x6e \
+                                        };
+
+/* UUID of the custom BLE UART service */
+const uint8 bleUartServiceUuid_old[16]    = {
                                             0x31, 0x01, 0x9b, 0x5f, 0x80, 0x00, 0x00,0x80, \
                                             0x00, 0x10, 0x00, 0x00, 0xd0, 0xcd, 0x03, 0x00 \
                                         };
 
 /* UUID of the TX attribute of the custom BLE UART service */
-const uint8 uartTxAttrUuid[16]        = {
+const uint8 uartTxAttrUuid_old[16]        = {
                                             0x31, 0x01, 0x9b, 0x5f, 0x80, 0x00, 0x00,0x80, \
                                             0x00, 0x10, 0x00, 0x00, 0xd1, 0xcd, 0x03, 0x00 \
                                         };
 
 /* UUID of the RX attribute of the custom BLE UART service */
-const uint8 uartRxAttrUuid[16]        = {
+const uint8 uartRxAttrUuid_old[16]        = {
                                             0x31, 0x01, 0x9b, 0x5f, 0x80, 0x00, 0x00,0x80, \
                                             0x00, 0x10, 0x00, 0x00, 0xd2, 0xcd, 0x03, 0x00 \
-                                        };
+};
 
 /* structure to be passed for discovering service by UUID */
 const CYBLE_GATT_VALUE_T    bleUartServiceUuidInfo = { 
@@ -62,6 +104,124 @@ CYBLE_GATTC_WRITE_REQ_T     enableNotificationReqParam   = {
                                                                 0
                                                             };
 
+
+/*******************************************************************************
+* Function Name: Get_Adv_Scan_Packets
+********************************************************************************
+*
+* Summary:
+* This function gets information from Advertisement and Scan Response packets
+*
+* Parameters:  
+* scanReport - Advertisement report received by the Central
+*
+* Return: 
+*  None
+*
+*******************************************************************************/
+
+void Get_Adv_Scan_Packets(CYBLE_GAPC_ADV_REPORT_T* scanReport)
+{
+ uint8 RepIndex; //Index for Bytes in Scan Response Packet
+    {
+        char buffer[40], name[20];
+        
+        if (devIndex < MAX_BLE_DEVICE_NUM)
+        { 
+            // check if event type is scan report
+            if ((scanReport->eventType == CYBLE_GAPC_CONN_UNDIRECTED_ADV)||
+                (scanReport->eventType == CYBLE_GAPC_CONN_DIRECTED_ADV)||
+                (scanReport->eventType == CYBLE_GAPC_SCAN_UNDIRECTED_ADV)||
+                (scanReport->eventType == CYBLE_GAPC_NON_CONN_UNDIRECTED_ADV)||
+                (scanReport->eventType == CYBLE_GAPC_SCAN_RSP) )
+            {
+                // indicator of next parameter length
+                int ind = 0, msg_id, success_flag = 0b00;
+
+                // loop until all data is looked through
+                while(success_flag != 0b11) 
+                {
+                    // get msg id
+                    msg_id = scanReport->data[ind+1];
+                    switch(msg_id) 
+                    {
+                        case 0x09:
+                            // check if name larger than 2 characters
+                            if(scanReport->data[ind] > 2 + 1) 
+                            {
+                                if(scanReport->data[ind+2] == BlName[0] && scanReport->data[ind+3] == BlName[1]) 
+                                {
+                                    // copy name for printing
+                                    //int i;
+                                    //for(i = 0; i < scanReport->data[ind] - 1; i++) {
+                                    //    name[i] = scanReport->data[ind+2+i];
+                                    //}
+                                    memcpy(name, &(scanReport->data[ind+2]), scanReport->data[ind] - 1);
+                                    name[scanReport->data[ind] - 1] = '\0';
+                                    
+                                    success_flag = success_flag | 0b01;
+                                }
+                            }
+                            break;
+                        
+                        case 0xFF:
+                            // check if data not 5 bytes
+                            if(scanReport->data[ind] == 5 &&(scanReport->data[ind+1] == 0xff) && \
+                              (scanReport->data[ind+2] == 0x31) && (scanReport->data[ind+3] == 0x01) && \
+                              (scanReport->data[ind+4] == 0x3b) && (scanReport->data[ind+5] == 0x04) ) 
+                            {
+                                success_flag = success_flag | 0b10;
+                            }
+                            break;
+                        
+                        default:
+                            break;
+                    }
+
+                    // check if all data read
+                    ind = ind + scanReport->data[ind] + 1;
+                    if(ind >= scanReport->dataLen) 
+                    {
+                        break;
+                    }
+                }
+                // it is one of the mussels
+                if(success_flag == 0b11) 
+                {
+                    int i, found = 0;
+                    // check if already in device list
+                    for(i = 0; i < devIndex; i++) 
+                    {
+                        if( !strncmp((char*) scanReport->peerBdAddr, (char*)scannedPeriphDevice[i].connectPeriphDevice.bdAddr, 6) ) 
+                        {
+                            found = 1;
+                            break;
+                        }
+                    }
+                    // if not yet added, add
+                    if(found == 0) 
+                    { 
+                        memcpy(scannedPeriphDevice[devIndex].connectPeriphDevice.bdAddr, scanReport->peerBdAddr,
+                               sizeof(scannedPeriphDevice[devIndex].connectPeriphDevice.bdAddr));
+                        memcpy(scannedPeriphDevice[devIndex].name, name, 10);
+                        
+                        UART_UartPutString ("\n");  
+                        sprintf(buffer,"Found Device No: %d\r\n",devIndex);
+                		UART_UartPutString(buffer);
+                        
+                        sprintf(buffer,"Name: %s\r\n",name);
+                        UART_UartPutString(buffer);
+                        
+                        sprintf(buffer, "RSSI: %d \r\n", scanReport->rssi);
+                        UART_UartPutString(buffer);
+                        
+                        devIndex++;
+                    }
+                }
+            }
+        }
+    }
+}
 
 /*******************************************************************************
 * Function Name: HandleBleProcessing
@@ -87,7 +247,7 @@ void HandleBleProcessing(void)
     {
 
         case CYBLE_STATE_SCANNING:
-            if(peerDeviceFound)
+            if(IsSelected)
             {
                 CyBle_GapcStopScan();
             }
@@ -119,20 +279,17 @@ void HandleBleProcessing(void)
                 
         case CYBLE_STATE_DISCONNECTED:
         {
-            if(peerDeviceFound)
+            if(IsSelected)
             {
-                UART_UartPutString("\n Found device...");
-                cyble_api_result = CyBle_GapcConnectDevice(&peerAddr);
+                //UART_UartPutString("\n Found device...");
+                //cyble_api_result = CyBle_GapcConnectDevice(&connectPeriphDevice[Periph_Selected]);
+                cyble_api_result = CyBle_GapcConnectDevice(&scannedPeriphDevice[Periph_Selected].connectPeriphDevice);
                 
-			    if(CYBLE_ERROR_OK == cyble_api_result)
-			    {
-				    peerDeviceFound = false;
-			    }
             }
             else
             {
                 CyBle_GapcStartScan(CYBLE_SCANNING_FAST);
-                UART_UartPutString("\n Start scanning...");
+                UART_UartPutString("Start scanning...\n");
             }
             break;
         }
@@ -161,8 +318,9 @@ void HandleBleProcessing(void)
 *******************************************************************************/
 void AppCallBack(uint32 event, void *eventParam)
 {
-    CYBLE_GATTC_READ_BY_TYPE_RSP_PARAM_T    *readResponse;
+    
     CYBLE_GAPC_ADV_REPORT_T		            *advReport;
+    CYBLE_GATTC_READ_BY_TYPE_RSP_PARAM_T    *readResponse;
     CYBLE_GATTC_FIND_BY_TYPE_RSP_PARAM_T    *findResponse;
     CYBLE_GATTC_FIND_INFO_RSP_PARAM_T       *findInfoResponse;
     int i;
@@ -171,49 +329,29 @@ void AppCallBack(uint32 event, void *eventParam)
     switch (event)
     {
         case CYBLE_EVT_STACK_ON:
-
-            break;
-        
-        case CYBLE_EVT_GAPC_SCAN_START_STOP:
-            break;
-        
-        
-        case CYBLE_EVT_GAPC_SCAN_PROGRESS_RESULT:
+        {
             
-            advReport = (CYBLE_GAPC_ADV_REPORT_T *) eventParam;
-            /*
-            UART_UartPutChar(advReport->dataLen);
-            for(i=0;i<advReport->dataLen; i++){
-                UART_UartPutChar(i+'0');
-                UART_UartPutChar(advReport->data[i]);
-            }
-            */
-            /* check if report has manfacturing data corresponding to the intended matching peer */
-            if((advReport->eventType == CYBLE_GAPC_SCAN_RSP) && (advReport->dataLen == 0x0D) \
-                    && (advReport->data[0] == 0x06)\
-                    && (advReport->data[7] == 0x05) && (advReport->data[8] == 0xff) \
-                    && (advReport->data[9] == 0x31) && (advReport->data[10] == 0x01) \
-                    && (advReport->data[11] == 0x3b) && (advReport->data[12] == 0x04))
+            UART_UartPutString("BLE ON\r\n");
+           
+	        CyBle_GapcStartScan(CYBLE_SCANNING_FAST);
+            break;
+        }
+        
+        case CYBLE_EVT_TIMEOUT: 
+        {
+            if( CYBLE_GAP_SCAN_TO ==*(uint16*) eventParam)
             {
-                /* check if name is corresponding to desired aMussel name */
-                if((advReport->data[1] == 0x09) && (advReport->data[2] == BlName[0])\
-                    && (advReport->data[3] == BlName[1]) && (advReport->data[4] == BlName[2]) \
-                    && (advReport->data[5] == BlName[3]) && (advReport->data[6] == BlName[4])) 
-                {
-                    peerDeviceFound = true;
-                    
-                    memcpy(peerAddr.bdAddr, advReport->peerBdAddr, sizeof(peerAddr.bdAddr));
-                    peerAddr.type = advReport->peerAddrType;
-                    
-                    #ifdef PRINT_MESSAGE_LOG   
-                        UART_UartPutString("\n\r\n\rServer with matching custom service discovered...");
-                    #endif
-                }
-                else {
-                    UART_UartPutString("\nWrong aMussel");
-                }
+                // Start Scanning again when timeout occurs
+                CyBle_GapcStartScan(CYBLE_SCANNING_SLOW);
             }
+        }
+
+        case CYBLE_EVT_GAPC_SCAN_PROGRESS_RESULT:
+        
             
+            /*Get the information from advertisement and scan response packets*/
+            Get_Adv_Scan_Packets((CYBLE_GAPC_ADV_REPORT_T *)eventParam);
+            advReport = (CYBLE_GAPC_ADV_REPORT_T *) eventParam;
             
             break;    
             
@@ -221,15 +359,40 @@ void AppCallBack(uint32 event, void *eventParam)
             UART_UartPutString("\nAUTH\n");
             break;
             
+            
+        case CYBLE_EVT_GATT_CONNECT_IND:
+            
+            #ifdef PRINT_MESSAGE_LOG   
+                UART_UartPutString("Connection established. Press button for disconnection\n\r");             
+            #endif
+            
+            /* When the peripheral device is connected, store the connection handle.*/
+            IsConnected = 1;
+
+            connHandle = *(CYBLE_CONN_HANDLE_T *)eventParam;
+            
+            break;
+            
+        case CYBLE_EVT_GAP_DEVICE_CONNECTED:
+            break;
+            
         case CYBLE_EVT_GAP_DEVICE_DISCONNECTED:
             
             /* RESET all flags */
-            peerDeviceFound         = false;
+            IsConnected = 0;
             notificationEnabled     = false;
             infoExchangeState       = INFO_EXCHANGE_START;
             
+            if (!(IsSelected))
+            {
+                if(CYBLE_ERROR_OK != CyBle_GapcStartScan(CYBLE_SCANNING_FAST))
+                {
+                    UART_UartPutString ("Start Scanning Failed\n");
+                }
+            }
+            
             #ifdef PRINT_MESSAGE_LOG   
-                UART_UartPutString("\n\r DISCONNECTED!!! \n\r ");
+                UART_UartPutString("\n\r\tDISCONNECTED!!! \n\r");
                 while(0 != (UART_SpiUartGetTxBufferSize() + UART_GET_TX_FIFO_SR_VALID));
             #endif
             
@@ -240,7 +403,21 @@ void AppCallBack(uint32 event, void *eventParam)
             UART_Start();
             
             break;
-        
+            
+        case CYBLE_EVT_GAPC_SCAN_START_STOP:
+            
+            switch(CyBle_GetState())
+            {
+                case CYBLE_STATE_SCANNING:
+                    UART_UartPutString("Scanning for BLE devices...\n\r");
+                    break;
+            
+                default:
+                    UART_UartPutString("Stopped scanning for BLE devices...\n\r");
+                    break;
+            }        
+            break;
+
         case CYBLE_EVT_GATTC_READ_BY_TYPE_RSP:
             
             readResponse = (CYBLE_GATTC_READ_BY_TYPE_RSP_PARAM_T *) eventParam;
@@ -330,20 +507,11 @@ void AppCallBack(uint32 event, void *eventParam)
             notificationEnabled = true;
             
             #ifdef PRINT_MESSAGE_LOG   
-                UART_UartPutString("\n\rNotifications enabled\n\r");
                 UART_UartPutString("\n\rStart entering data:\n\r");
             #endif
             
             break;
-        
-        case CYBLE_EVT_GATT_CONNECT_IND:
-            
-            #ifdef PRINT_MESSAGE_LOG   
-                UART_UartPutString("\n\rConnection established");             
-            #endif
-            
-            break;
-            
+
         default:            
             break;
     }

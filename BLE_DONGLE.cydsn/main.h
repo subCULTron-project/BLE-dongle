@@ -21,6 +21,15 @@
     #include "app_LED.h"
     #include "stdbool.h"    
 
+    
+    extern uint8 Periph_Selected;
+    extern uint8 devIndex;
+    	
+    extern uint32  UartRxDataSim;
+    extern uint8 IsSelected;
+    extern uint8 IsConnected;
+    extern CYBLE_CONN_HANDLE_T connHandle;
+    
     /***************************************
     *   Conditional compilation parameters
     ***************************************/      

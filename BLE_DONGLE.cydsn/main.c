@@ -25,13 +25,46 @@
 
 #include "main.h"
 
-uint8_t bootloaderStart = 0;
+uint32  UartRxDataSim;  // Character Input Received from the UART Terminal for Initiating Connection / Disconnection
+uint8 devIndex;         // Index of the devices detected in Scanning
+uint8 Periph_Selected;  // The Index of the Peropheral which the user wants to connect the Central 
+uint8 IsSelected;       // Whether user has given Periph_Selected
+uint8 IsConnected;      // Whether the Central is in connected state or not.
+uint8 IsUserReset = 0;          // checking whether user reset button was pressed
+CYBLE_CONN_HANDLE_T			connHandle; // Handle of the device connected.
+CYBLE_API_RESULT_T 		    apiResult;
 
-CY_ISR(vUserPin_IRQ) {
 
-    bootloaderStart = 0;
-    CyBle_Stop();
-    CyBle_Start(AppCallBack);
+
+CY_ISR(vUserPin_IRQ)
+{
+    if (IsConnected) 
+    {
+        CyBle_GapDisconnect(connHandle.bdHandle);
+    }
+    else
+    {
+        CyBle_GapcStartScan(CYBLE_SCANNING_FAST);
+    }
+    IsConnected = 0;
+    IsSelected = 0;
+    IsUserReset = 1;
+    //devIndex= 0;
+}
+
+void print_help() 
+{
+    UART_UartPutString ("\n"); 
+    UART_UartPutString ("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\n");
+    UART_UartPutString ("* Commands to connect to aMussels:\n");
+    UART_UartPutString ("*\th - print this help\n");
+    UART_UartPutString ("*\n");
+    UART_UartPutString ("*\tl - list all seen aMussels\n");
+    UART_UartPutString ("*\n");
+    UART_UartPutString ("*\ta - pick a specific aMussel. After character 'a' send a ID byte of the aMussel.\n");
+    UART_UartPutString ("*\n");
+    UART_UartPutString ("*\tn - pick a specific aMussel from the list of all seen aMussels.\n");
+    UART_UartPutString ("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\n");
 }
 
 
@@ -46,6 +79,7 @@ int main()
     
     int i;
     uint8_t ch;
+    char buffer[30];
     
     CyGlobalIntDisable;
     
@@ -60,31 +94,9 @@ int main()
     bleApiResult = CyBle_Start(AppCallBack); 
     
     /* initialize default BLE peripheral name */
-    BlName[0] = 'a'; BlName[1] = 'M'; BlName[2] = '0'; BlName[3] = '0'; BlName[4] = '1';
-    
-    if(bleApiResult == CYBLE_ERROR_OK)
-    {
-        #ifdef PRINT_MESSAGE_LOG
-            UART_UartPutString("\n\r************************************************************");
-            UART_UartPutString("\n\r***************** BLE UART example project *****************");
-            UART_UartPutString("\n\r************************************************************\n\r");
-            UART_UartPutString("\n\rDevice role \t: CENTRAL");
-            
-            #ifdef LOW_POWER_MODE
-                UART_UartPutString("\n\rLow Power Mode \t: ENABLED");
-            #else
-                UART_UartPutString("\n\rLow Power Mode \t: DISABLED");
-            #endif
-            
-            #ifdef FLOW_CONTROL
-                UART_UartPutString("\n\rFlow Control \t: ENABLED");  
-            #else
-                UART_UartPutString("\n\rFlow Control \t: DISABLED");
-            #endif
-            
-        #endif
-    }
-    else
+    BlName[0] = 'a'; BlName[1] = 'M';
+
+    if(bleApiResult != CYBLE_ERROR_OK)
     {
         #ifdef PRINT_MESSAGE_LOG   
             UART_UartPutString("\n\r\t\tCyBle stack initilization FAILED!!! \n\r ");
@@ -94,47 +106,141 @@ int main()
         while(1);
     }
     
-    //CyBle_ProcessEvents();
+    // print help
+    print_help();
     
     /***************************************************************************
     * Main polling loop
     ***************************************************************************/
     while(1)
     {                  
-        UserLED_Write(bootloaderStart);
         
-        if(bootloaderStart == 0) {
-            
-            UART_UartPutString("\n Enter aMussel number [000 - 999]: ");
-            
-            for(i=0;i<3;i++) {
-                do {
-                    ch = UART_UartGetChar();
-                } while(ch == 0);
-                
-                if(ch >= '0' && ch <= '9') {
-                    BlName[i+2] = ch;
-                    UART_UartPutChar(ch);
-                }
-                else {
-                    UART_UartPutString("\n Index out of range. \n Repeat number sequence [000 - 999]");
-                    i = -1;
-                }
-                
-                if(i == 2) 
-                    bootloaderStart = 1;
+        CyBle_ProcessEvents();
+        
+        if(IsUserReset) 
+        {
+            IsUserReset = 0;
+            UART_UartPutString ("\nCurrent device list:\n");
+            if(devIndex == 0) 
+            {
+                UART_UartPutString ("\tEmpty!\n");
             }
-            UART_UartPutString("\n Connecting to ");
-            for(i=0; i<5; i++){
-                UART_UartPutChar(BlName[i]);
+            for(i = 0; i < devIndex; i++) 
+            {
+                sprintf(buffer,"\tDevice No: %d\tName: %s\r\n", i, scannedPeriphDevice[i].name);
+        		UART_UartPutString(buffer);
             }
         }
+        
+        if(!IsSelected)
+        {
+            if(UART_SpiUartGetRxBufferSize())
+    		{
+                UartRxDataSim = UART_UartGetChar();
+
+                switch(UartRxDataSim) 
+                {
+                    case 'l': 
+                    {
+                        UART_UartPutString ("\nCurrent device list:\n");
+                        if(devIndex == 0) 
+                        {
+                            UART_UartPutString ("\tEmpty!\n");
+                        }
+                        for(i = 0; i < devIndex; i++) 
+                        {
+                            
+                            sprintf(buffer,"\tDevice No: %d\tName: %s\r\n", i, scannedPeriphDevice[i].name);
+                    		UART_UartPutString(buffer);
+                        }
+                        break;
+                    }
+                    case 'h': 
+                    {
+                        print_help();
+                        break;
+                    }
+                    case 'a': 
+                    {
+                        // wait for next character
+                        while(!UART_SpiUartGetRxBufferSize());
+                        
+                        UartRxDataSim = UART_UartGetChar();
+                        
+                        // check if aMussel is in the table
+                        char name[6] = {'a','M','0','0','0','\0'};
+                        
+                        name[2] = UartRxDataSim / 100 + '0';
+                        name[3] = (UartRxDataSim % 100) / 10 + '0';
+                        name[4] = (UartRxDataSim % 10) + '0';
+                        
+                        int ind = 0, found = 0;
+                        
+                        for(i = 0; i < devIndex; i++) 
+                        {
+                            if(!strcmp(name, (char*)scannedPeriphDevice[i].name)) 
+                            {
+                                ind = i;
+                                found = 1;
+                                break;
+                            }
+                        }
+                        
+                        if(found == 1) 
+                        {
+                            Periph_Selected = i;
+                            IsSelected = 1;
+                            //Stop the scanning before connecting to the preferred peripheral
+                            if(CyBle_GetState() != CYBLE_STATE_CONNECTING) 
+                            {
+                                CyBle_GapcStopScan();
+                            }
+                            sprintf(buffer,"Connecting to aMussel %s\r\n", name);
+                            UART_UartPutString(buffer);
+                        }
+                        else 
+                        {
+                            sprintf(buffer,"aMussel %s not found in the list! Try again!\r\n",name);
+                            UART_UartPutString(buffer);
+                        }
+                        break;
+                    }
+                    case 'n': 
+                    {
+                        // wait for next character
+                        while(!UART_SpiUartGetRxBufferSize());
+                        
+                        UartRxDataSim = UART_UartGetChar();
+                        
+                        // Check if a Valid Device index has been received
+                        if (UartRxDataSim < devIndex)
+                        {
+                            Periph_Selected = (uint8)(UartRxDataSim);
+                            IsSelected = 1;
+                            //Stop the scanning before connecting to the preferred peripheral
+                            if(CyBle_GetState() != CYBLE_STATE_CONNECTING) 
+                            {
+                                CyBle_GapcStopScan();
+                            }
+                            
+                            sprintf(buffer,"Connecting to aMussel %s\r\n", scannedPeriphDevice[Periph_Selected].name);
+                            UART_UartPutString(buffer);
+                        }
+                        break;
+                    }
+                    default: 
+                    {
+                        UART_UartPutString("Invalid command!\r\n");
+                        break;
+                    }
+                }
+    		}
+        }
+        
         /*******************************************************************
         *  Process all pending BLE events in the stack
         *******************************************************************/      
         HandleBleProcessing();
-        CyBle_ProcessEvents();
-        
     }
 }
 
